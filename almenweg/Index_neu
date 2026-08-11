@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Wandertour</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;1,400&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --parchment:#f5f0e8;
+  --parchment-dark:#e8e0cc;
+  --parchment-mid:#ede5d2;
+  --ink:#2c2417;
+  --ink-light:#5a4e3a;
+  --green:#3d5a3e;
+  --border:#c4b48a;
+  --border-light:#d8caaa;
+  --highlight:#c07a18;   
+  --font-serif:'EB Garamond',serif;
+  --font-sans:'Source Sans 3',sans-serif;
+}
+html,body{
+  background:var(--parchment);color:var(--ink);
+  font-family:var(--font-sans);font-weight:300;min-height:100vh;
+}
+
+/* ── HEADER ──────────────────────────────────────────────── */
+header{
+  background:var(--green);color:var(--parchment);
+  text-align:center;padding:1.8rem 1.5rem 1.5rem;
+  border-bottom:3px solid var(--ink);position:relative;
+}
+header::before{
+  content:'';position:absolute;inset:5px;
+  border:1px solid rgba(245,240,232,.2);pointer-events:none;
+}
+.header-eyebrow{
+  font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;
+  color:rgba(245,240,232,.55);margin-bottom:.4rem;
+}
+header h1{
+  font-family:var(--font-serif);font-size:clamp(1.8rem,4vw,2.8rem);
+  font-weight:600;letter-spacing:.02em;
+}
+header p{
+  font-family:var(--font-serif);font-style:italic;
+  font-size:.95rem;color:rgba(245,240,232,.7);margin-top:.3rem;
+}
+
+/* ── GESAMT-STATS ─────────────────────────────────────────── */
+.stats-bar{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
+  border-bottom:2px solid var(--border);
+  background:var(--parchment-mid);
+}
+.stat{padding:.65rem 1.1rem;border-right:1px solid var(--border-light);}
+.stat:last-child{border-right:none;}
+.stat-label{font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-light);margin-bottom:.2rem;}
+.stat-value{font-size:1.05rem;font-weight:600;color:var(--green);}
+
+/* ── HAUPTBEREICH ─────────────────────────────────────────── */
+.main-area{
+  display:flex;min-height:480px;
+  border-bottom:2px solid var(--border);
+}
+
+/* ── SIDEBAR ──────────────────────────────────────────────── */
+.sidebar{
+  width:230px;flex-shrink:0;
+  background:var(--parchment-dark);
+  border-right:2px solid var(--border);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+.sidebar-title{
+  padding:.7rem 1rem .5rem;
+  font-family:var(--font-serif);font-style:italic;
+  font-size:.82rem;color:var(--ink-light);letter-spacing:.05em;
+  border-bottom:1px solid var(--border-light);flex-shrink:0;
+}
+.etappen-liste{flex:1;overflow-y:auto;}
+
+.etappe-item{
+  display:grid;
+  grid-template-columns:28px 1fr auto;
+  align-items:start;
+  gap:.3rem;
+  padding:.55rem .9rem;
+  border-bottom:1px solid var(--border-light);
+  cursor:pointer;transition:background .12s;
+  user-select:none;
+}
+.etappe-item:hover{background:rgba(61,90,62,.07);}
+.etappe-item.aktiv{
+  background:var(--highlight);
+  color:#fff;
+}
+.etappe-item.aktiv .etappe-nr,
+.etappe-item.aktiv .etappe-datum,
+.etappe-item.aktiv .etappe-km{color:rgba(255,255,255,.75);}
+
+.etappe-nr{
+  font-size:.65rem;letter-spacing:.05em;
+  color:var(--ink-light);padding-top:.15rem;
+  font-family:var(--font-sans);
+}
+.etappe-name{font-size:.84rem;line-height:1.3;grid-column:2;font-weight:400;}
+.etappe-datum{font-size:.7rem;color:var(--ink-light);grid-column:2;font-style:italic;margin-top:.1rem;}
+.etappe-km{
+  font-size:.72rem;color:var(--ink-light);
+  white-space:nowrap;padding-top:.15rem;
+}
+
+.sidebar-gesamt{
+  padding:.6rem .9rem;
+  background:var(--green);
+  color:rgba(245,240,232,.85);
+  font-size:.78rem;font-family:var(--font-serif);font-style:italic;
+  border-top:2px solid var(--border);flex-shrink:0;
+  line-height:1.5;
+}
+
+/* ── KARTE ────────────────────────────────────────────────── */
+.map-wrap{flex:1;min-width:0;}
+#map{width:100%;height:100%;min-height:480px;}
+
+/* ── HÖHENPROFIL ──────────────────────────────────────────── */
+.elev-section{
+  background:var(--parchment-dark);
+  border-top:1px solid var(--border);
+  padding:.9rem 1.5rem 1.1rem;
+}
+.elev-label{
+  font-family:var(--font-serif);font-style:italic;font-size:.8rem;
+  color:var(--ink-light);margin-bottom:.45rem;letter-spacing:.05em;
+  display:flex;align-items:center;gap:.7rem;
+}
+.elev-label span{
+  font-style:normal;font-size:.72rem;letter-spacing:.05em;
+  padding:.15rem .5rem;border-radius:2px;
+  background:var(--highlight);color:#fff;
+  display:none;
+}
+.elev-canvas-wrap{height:140px;position:relative;}
+
+/* ── FOTOGALERIE ──────────────────────────────────────────── */
+.foto-section{
+  padding:1.2rem 1.5rem 1.5rem;
+  border-top:2px solid var(--border);
+}
+.foto-section h3{
+  font-family:var(--font-serif);font-size:1rem;font-style:italic;
+  color:var(--ink-light);margin-bottom:.9rem;
+}
+.foto-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
+  gap:.7rem;
+}
+.foto-item{
+  aspect-ratio:4/3;border:1px solid var(--border);border-radius:2px;
+  overflow:hidden;position:relative;background:var(--parchment-mid);cursor:pointer;
+}
+.foto-item img{
+  width:100%;height:100%;object-fit:cover;
+  transition:transform .3s;display:block;
+}
+.foto-item:hover img{transform:scale(1.04);}
+
+/* ── LIGHTBOX ─────────────────────────────────────────────── */
+.lightbox{
+  display:none;position:fixed;inset:0;
+  background:rgba(20,14,6,.9);z-index:9999;
+  align-items:center;justify-content:center;
+}
+.lightbox.open{display:flex;}
+.lightbox img{max-width:90vw;max-height:88vh;border:2px solid var(--border);}
+.lb-close{
+  position:absolute;top:1rem;right:1.3rem;
+  background:none;border:none;color:var(--parchment);
+  font-size:2rem;cursor:pointer;line-height:1;
+}
+
+/* ── FOOTER ───────────────────────────────────────────────── */
+footer{
+  text-align:center;padding:1rem;
+  border-top:2px solid var(--ink);background:var(--green);
+  color:rgba(245,240,232,.5);font-size:.72rem;letter-spacing:.07em;
+}
+
+/* ── Leaflet ──────────────────────────────────────────────── */
+.leaflet-popup-content-wrapper{
+  background:var(--parchment);border:1px solid var(--border);
+  border-radius:2px;box-shadow:2px 2px 8px rgba(44,36,23,.2);
+}
+.leaflet-popup-content{
+  font-family:var(--font-serif);color:var(--ink);
+  font-size:.88rem;margin:.5rem .7rem;
+}
+.leaflet-popup-tip{background:var(--parchment);}
+.foto-map-icon{
+  width:26px;height:26px;border-radius:50%;
+  background:#c07a18;border:2px solid #fff;
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;box-shadow:0 1px 4px rgba(0,0,0,.4);cursor:pointer;
+}
+
+#loading,#fehler{
+  padding:3rem;text-align:center;
+  font-family:var(--font-serif);font-style:italic;
+  color:var(--ink-light);font-size:1.1rem;
+}
+#fehler{color:#8b2e1a;display:none;}
+
+/* ── RESPONSIVE ANPASSUNGEN FÜR HANDYS (< 768px) ───────────── */
+@media screen and (max-width: 768px) {
+  .main-area {
+    flex-direction: column; /* Untereinander statt nebeneinander */
+  }
+  .sidebar {
+    width: 100%;
+    max-height: 250px; /* Begrenzt die Höhe der Etappen-Liste auf dem Handy */
+    border-right: none;
+    border-bottom: 2px solid var(--border);
+  }
+  .map-wrap {
+    width: 100%;
+  }
+  #map {
+    min-height: 350px; /* Etwas kompaktere Kartenhöhe auf Smartphones */
+  }
+  header {
+    padding: 1.2rem 1rem 1rem;
+  }
+  .elev-section, .foto-section {
+    padding: 1rem;
+  }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-eyebrow">Bergwandern &amp; Natur</div>
+  <h1 id="tourName">Wandertour</h1>
+  <p id="tourUntertitel">Routen, Etappen, Höhenprofil &amp; Impressionen</p>
+</header>
+
+<div id="loading">Touren werden geladen …</div>
+<div id="fehler"></div>
+
+<div id="hauptContent" style="display:none">
+  <div class="stats-bar" id="statsBar"></div>
+
+  <div class="main-area">
+    <div class="sidebar">
+      <div class="sidebar-title">Etappen · nach Datum</div>
+      <div class="etappen-liste" id="etappenListe"></div>
+      <div class="sidebar-gesamt" id="sidebarGesamt"></div>
+    </div>
+    <div class="map-wrap">
+      <div id="map"></div>
+    </div>
+  </div>
+
+  <div class="elev-section">
+    <div class="elev-label" id="elevLabel">
+      Höhenprofil – Gesamtstrecke
+      <span id="elevEtappenHint"></span>
+    </div>
+    <div class="elev-canvas-wrap">
+      <canvas id="elevChart"></canvas>
+    </div>
+  </div>
+
+  <div class="foto-section" id="fotoSection" style="display:none">
+    <h3>Impressionen</h3>
+    <div class="foto-grid" id="fotoGrid"></div>
+  </div>
+</div>
+
+<footer>&#9968; Eigene Wandertouren &nbsp;·&nbsp; Österreichische Alpen</footer>
+
+<div class="lightbox" id="lightbox">
+  <button class="lb-close" id="lbClose">&times;</button>
+  <img id="lbImg" src="" alt=""/>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+<script>
+const FARBE_GESAMT    = "#3d5a3e";   
+const FARBE_INAKTIV   = "#3d5a3e";   
+const FARBE_AKTIV     = "#c07a18";   
+const OPAZITAET_INAKT = 0.55;
+const OPAZITAET_AKT   = 1.0;
+
+const lb = document.getElementById("lightbox");
+document.getElementById("lbClose").onclick = () => lb.classList.remove("open");
+lb.addEventListener("click", e => { if(e.target===lb) lb.classList.remove("open"); });
+function zeigePhoto(src){ document.getElementById("lbImg").src=src; lb.classList.add("open"); }
+
+let karte        = null;
+let etappenLayer = [];   
+let aktiveEtappe = null; 
+let elevChart    = null;
+let tourData     = null;
+
+function initKarte(tour){
+  karte = L.map("map", {scrollWheelZoom: false});
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+    attribution:"© OpenStreetMap", maxZoom:19
+  }).addTo(karte);
+
+  const alleBounds = [];
+
+  tour.etappen.forEach((e, i) => {
+    const latlngs = e.punkte.map(p=>[p[0],p[1]]);
+    const layer = L.polyline(latlngs, {
+      color:   FARBE_INAKTIV,
+      weight:  3.5,
+      opacity: OPAZITAET_AKT,
+    }).addTo(karte);
+
+    layer.bindTooltip(`<b>${e.name}</b><br>${e.datum ? e.datum+"&nbsp;·&nbsp;" : ""}${e.stats.distanz_km} km`, {
+      sticky:true, direction:"top"
+    });
+    layer.on("click", () => aktiviereEtappe(i));
+    etappenLayer.push(layer);
+    latlngs.forEach(ll => alleBounds.push(ll));
+  });
+
+  if(alleBounds.length){
+    karte.fitBounds(L.latLngBounds(alleBounds), {padding:[25,25]});
+  }
+
+  const alle = tour.etappen.flatMap(e=>e.punkte);
+  const dotIcon = (c,title) => L.divIcon({
+    className:"",
+    html:`<div title="${title}" style="width:11px;height:11px;border-radius:50%;background:${c};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>`,
+    iconSize:[11,11], iconAnchor:[5.5,5.5]
+  });
+  L.marker([alle[0][0],alle[0][1]], {icon:dotIcon(FARBE_INAKTIV,"Start")})
+    .bindPopup(`<b>Start</b><br>${alle[0][2]} m ü. d. M.`).addTo(karte);
+  L.marker([alle[alle.length-1][0],alle[alle.length-1][1]], {icon:dotIcon("#8b2e1a","Ziel")})
+    .bindPopup(`<b>Ziel</b><br>${alle[alle.length-1][2]} m ü. d. M.`).addTo(karte);
+
+  (tour.fotos||[]).forEach(f => {
+    if(f.lat===null) return;
+    const icon = L.divIcon({
+      className:"",
+      html:`<div class="foto-map-icon">📷</div>`,
+      iconSize:[26,26], iconAnchor:[13,13]
+    });
+    L.marker([f.lat,f.lon],{icon})
+      .bindPopup(`<img src="${f.dateiname}" style="max-width:160px;max-height:110px;display:block;margin-bottom:.3rem" onerror="this.style.display='none'"/><div style="font-size:.8rem">${f.dateiname}</div>`)
+      .addTo(karte);
+  });
+}
+
+function aktiviereEtappe(idx){
+  if(aktiveEtappe === idx){
+    aktiveEtappe = null;
+    aktualisiereKarteStyle();
+    aktualisiereEtappenListe();
+    aktualisiereHoehenprofil();
+    karte.fitBounds(
+      L.latLngBounds(tourData.etappen.flatMap(e=>e.punkte.map(p=>[p[0],p[1]]))),
+      {padding:[25,25]}
+    );
+    return;
+  }
+  aktiveEtappe = idx;
+  aktualisiereKarteStyle();
+  aktualisiereEtappenListe();
+  aktualisiereHoehenprofil();
+  karte.fitBounds(etappenLayer[idx].getBounds(), {padding:[40,40]});
+}
+
+function aktualisiereKarteStyle(){
+  etappenLayer.forEach((layer, i) => {
+    if(aktiveEtappe === null){
+      layer.setStyle({color:FARBE_INAKTIV, weight:3.5, opacity:OPAZITAET_AKT});
+    } else if(i === aktiveEtappe){
+      layer.setStyle({color:FARBE_AKTIV, weight:5.5, opacity:OPAZITAET_AKT});
+      layer.bringToFront();
+    } else {
+      layer.setStyle({color:FARBE_INAKTIV, weight:3, opacity:OPAZITAET_INAKT});
+    }
+  });
+}
+
+function aktualisiereEtappenListe(){
+  document.querySelectorAll(".etappe-item").forEach((item, i) => {
+    item.classList.toggle("aktiv", i === aktiveEtappe);
+  });
+}
+
+function bautHoehenprofil(tour){
+  const gesamt = tour.gesamt_profil;
+  const datasets = [
+    {
+      label: "Gesamtroute",
+      data: gesamt.map(p=>({x:p.km, y:p.ele})),
+      borderColor: FARBE_GESAMT,
+      backgroundColor: FARBE_GESAMT + "20",
+      borderWidth: 1.5,
+      pointRadius: 0,
+      fill: true,
+      tension: .3,
+      order: 2,
+    }
+  ];
+
+  if(aktiveEtappe !== null){
+    const e = tour.etappen[aktiveEtappe];
+    const eintrag = gesamt.filter(p => p.km >= e.km_start && p.km <= e.km_end + 0.01);
+    datasets.push({
+      label: e.name,
+      data: eintrag.map(p=>({x:p.km, y:p.ele})),
+      borderColor: FARBE_AKTIV,
+      backgroundColor: FARBE_AKTIV + "35",
+      borderWidth: 2.5,
+      pointRadius: 0,
+      fill: true,
+      tension: .3,
+      order: 1,
+    });
+  }
+
+  if(elevChart) elevChart.destroy();
+
+  elevChart = new Chart(document.getElementById("elevChart"), {
+    type: "line",
+    data: {datasets},
+    options:{
+      animation: false,
+      responsive: true,
+      maintainAspectRatio: false,
+      scales:{
+        x:{
+          type:"linear",
+          title:{display:true,text:"Kilometer",color:"#5a4e3a",font:{size:10,family:"Source Sans 3"}},
+          ticks:{color:"#5a4e3a", callback:v=>v+" km", maxTicksLimit:10},
+          grid:{color:"#c4b48a33"}
+        },
+        y:{
+          title:{display:true,text:"Höhe (m)",color:"#5a4e3a",font:{size:10,family:"Source Sans 3"}},
+          ticks:{color:"#5a4e3a", callback:v=>v+" m"},
+          grid:{color:"#c4b48a33"}
+        }
+      },
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:"#f5f0e8f0",titleColor:"#3d5a3e",
+          bodyColor:"#2c2417",borderColor:"#c4b48a",borderWidth:1,
+          callbacks:{
+            title:items=>items[0].parsed.x.toFixed(2)+" km",
+            label:item=>` ${item.dataset.label}: ${item.parsed.y.toFixed(0)} m`
+          }
+        }
+      }
+    }
+  });
+}
+
+function aktualisiereHoehenprofil(){
+  const hint = document.getElementById("elevEtappenHint");
+  if(aktiveEtappe !== null){
+    hint.textContent = tourData.etappen[aktiveEtappe].name + " hervorgehoben";
+    hint.style.display = "inline-block";
+  } else {
+    hint.style.display = "none";
+  }
+  bautHoehenprofil(tourData);
+}
+
+function bauUI(tour){
+  tourData = tour;
+  document.getElementById("tourName").textContent = tour.name;
+
+  const gs = tour.gesamt_stats;
+  document.getElementById("statsBar").innerHTML = [
+    ["Gesamtdistanz",  gs.distanz_km + " km"],
+    ["Aufstieg",       "+" + gs.aufstieg_m + " m"],
+    ["Abstieg",        "−" + gs.abstieg_m + " m"],
+    ["Höchster Punkt", gs.hoechster_m + " m"],
+    ["Tiefster Punkt", gs.tiefster_m + " m"],
+    ["Etappen",        tour.etappen.length],
+  ].map(([l,v])=>`<div class="stat"><div class="stat-label">${l}</div><div class="stat-value">${v}</div></div>`).join("");
+
+  const liste = document.getElementById("etappenListe");
+  tour.etappen.forEach((e, i) => {
+    const item = document.createElement("div");
+    item.className = "etappe-item";
+    item.dataset.idx = i;
+    item.innerHTML = `
+      <span class="etappe-nr">${String(i+1).padStart(2,"0")}</span>
+      <span class="etappe-name">${e.name}</span>
+      <span class="etappe-km">${e.stats.distanz_km} km</span>
+      ${e.datum ? `<span class="etappe-datum">${e.datum}</span>` : ""}
+    `;
+    item.addEventListener("click", () => aktiviereEtappe(i));
+    liste.appendChild(item);
+  });
+
+  document.getElementById("sidebarGesamt").innerHTML =
+    `Gesamt: ${gs.distanz_km} km &nbsp;·&nbsp; ${tour.etappen.length} Etappen<br>` +
+    `+${gs.aufstieg_m} m&nbsp;/&nbsp;−${gs.abstieg_m} m`;
+
+  initKarte(tour);
+  bautHoehenprofil(tour);
+
+  const mitFotos = (tour.fotos||[]).filter(f=>f.lat!==null || f.dateiname);
+  if(mitFotos.length){
+    const grid = document.getElementById("fotoGrid");
+    mitFotos.forEach(f => {
+      const div = document.createElement("div");
+      div.className = "foto-item";
+      div.onclick = () => zeigePhoto(f.dateiname);
+      div.innerHTML = `
+        <img src="${f.dateiname}" alt="Foto" loading="lazy"
+             onerror="this.parentElement.style.display='none'"/>
+      `;
+      grid.appendChild(div);
+    });
+    document.getElementById("fotoSection").style.display = "";
+  }
+}
+
+fetch("touren.json")
+  .then(r => {
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  })
+  .then(tour => {
+    document.getElementById("loading").style.display = "none";
+    document.getElementById("hauptContent").style.display = "";
+    bauUI(tour);
+  })
+  .catch(err => {
+    document.getElementById("loading").style.display = "none";
+    const el = document.getElementById("fehler");
+    el.style.display = "block";
+    el.innerHTML = `
+      ❌ &nbsp;touren.json konnte nicht geladen werden.<br><br>
+      Bitte zuerst <code>python gpx_to_json.py</code> ausführen<br>
+      und die Seite über <code>python -m http.server 8000</code> öffnen.<br><br>
+      <small style="color:#5a4e3a">Details: ${err.message}</small>
+    `;
+  });
+</script>
+</body>
+</html>
